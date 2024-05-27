@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Go and Chat</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="container">
+      <div id="card">
+        <div id="choose-container" class="container">
+          <h1 class="title">Go and Chat</h1>
+          <div class="buttons choose-buttons">
+            <button class="btn" onclick="joinChatroomContainer()">
+              Join Chatroom
+            </button>
+            <button class="btn" onclick="createChatroomContainer()">
+              Create Chatroom
+            </button>
+          </div>
+        </div>
+        <div id="join-container" class="container hidden">
+          <h1 class="title">Join Chatroom</h1>
+          <div class="input-area">
+            <label for="username-input">Username</label>
+            <input type="text" id="username-input" placeholder="Username" />
+          </div>
+          <div class="input-area">
+            <label for="room-code-input">Room Code</label>
+            <input type="text" id="room-code-input" placeholder="Room Code" />
+          </div>
+          <button class="btn btn-single" onclick="joinChatroom()">Join</button>
+          <h1 id="back" title="Back" onclick="goback()">⇦</h1>
+        </div>
+        <div id="create-container" class="container hidden">
+          <h1 class="title">Create Chatroom</h1>
+          <div class="input-area">
+            <label for="username-input">Username</label>
+            <input type="text" id="username-input" placeholder="Username" />
+          </div>
+          <button class="btn btn-single" onclick="createChatroom()">
+            Create
+          </button>
+          <h1 id="back" title="Back" onclick="goback()">⇦</h1>
+        </div>
+        <div id="message-container" class="container hidden">
+          <h1 class="title">Chatroom <span id="chatroom-code">hwtY3</span></h1>
+          <div>&#128100; <span id="chatroom-users"></span></div>
+          <div id="chat-area"></div>
+          <div id="chat-input">
+            <input
+            type="text"
+            id="message-input"
+            placeholder="Type a message..."
+          />
+          <button class="btn send" onclick="sendMessage()">Send</button>
+          <button class="btn leave" onclick="disconnect()">Leave</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="toaster">
+      <span class="message"></span>
+    </div>
+
+    <script>
+      const chooseContainer = document.getElementById("choose-container");
+      const joinContainer = document.getElementById("join-container");
+      const createContainer = document.getElementById("create-container");
+      const messageContainer = document.getElementById("message-container");
+      const card = document.getElementById("card");
+
+      let chatArea = document.getElementById("chat-area");
+      let socket;
+      let username = "";
+      let roomCode = "";
+
+      initialTransition();
+
+      function initializeWebSocket() {
+        socket = new WebSocket(
+          "ws://" + window.location.host + "/ws?code=" + roomCode
+        );
+        socket.onopen = function () {
+          console.log("WebSocket connection established.");
+        };
+        socket.onmessage = function (event) {
+          console.log("On message");
+          let messageData = JSON.parse(event.data);
+          console.log(messageData);
+          displayMessage(messageData);
+        };
+        socket.onclose = function (event) {
+          console.log("WebSocket connection closed:", event);
+          if (!event.wasClean) {
+            alert(
+              "Connection closed unexpectedly. Please try reloading the page."
+            );
+            location.reload();
+          } else {
+            toaster("success", "Disconnected !");
+            goback();
+            chatArea.innerHTML = "";
+          }
+        };
+        socket.onerror = function (event) {
+          console.error("WebSocket error observed:", event);
+        };
+      }
+
+      function joinChatroom() {
+        const usernameInput = document.getElementById("username-input");
+        const roomCodeInput = document.getElementById("room-code-input");
+        username = usernameInput.value.trim();
+        roomCode = roomCodeInput.value.trim();
+        if (username === "" || roomCode === "") {
+          toaster("error", "! Username and Room Code cannot be empty.");
+          return;
+        }
+
+        fetch(`/ws?code=${roomCode}`)
+          .then((response) => {
+            if (response.status === 404) {
+              toaster("error", "! Chatroom not found");
+              return;
+            }
+            initializeWebSocket();
+            document.getElementById("choose-container").classList.add("hidden");
+            document.getElementById("join-container").classList.add("hidden");
+            document.getElementById("create-container").classList.add("hidden");
+            document
+              .getElementById("message-container")
+              .classList.remove("hidden");
+            toaster("success", "Connected !");
+            usernameInput.value = "";
+            roomCodeInput.value = "";
+          })
+          .catch(() => {
+            toaster("error", "Failed to connect to chatroom.");
+          });
+      }
+
+      function createChatroom() {
+        const usernameInput = createContainer.querySelector("#username-input");
+        username = usernameInput.value.trim();
+        if (username === "") {
+          alert("Username cannot be empty.");
+          return;
+        }
+        fetch("/create_chatroom", { method: "POST" })
+          .then((response) => response.json())
+          .then((data) => {
+            roomCode = data.code;
+            initializeWebSocket();
+            document.getElementById("choose-container").classList.add("hidden");
+            document.getElementById("join-container").classList.add("hidden");
+            document.getElementById("create-container").classList.add("hidden");
+            document
+              .getElementById("message-container")
+              .classList.remove("hidden");
+            document.getElementById(
+              "chatroom-code"
+            ).textContent = `${roomCode}`;
+            toaster("success", "Chatroom created!");
+            usernameInput.value = "";
+          });
+      }
+
+      function sendMessage() {
+        let chatInput = document.getElementById("message-input");
+        let message = chatInput.value;
+        if (message === "") {
+          return;
+        }
+        let messageData = {
+          sender: username,
+          content: message,
+          time: Date.now(),
+        };
+        socket.send(JSON.stringify(messageData));
+        chatInput.value = "";
+      }
+
+      function disconnect() {
+        if (socket) {
+          socket.close();
+        }
+      }
+
+      function displayMessage(messageData) {
+        if (
+          messageData.sender === "system" &&
+          messageData.content.startsWith("User count:")
+        ) {
+          let userCount = messageData.content.split(":")[1].trim();
+          document.getElementById(
+            "chatroom-users"
+          ).textContent = `${userCount}`;
+        } else if (
+          messageData.sender === "system" &&
+          messageData.content.startsWith("Room code:")
+        ) {
+          document.getElementById(
+            "chatroom-code"
+          ).textContent = `${messageData.content.split(":")[1].trim()}`;
+        } else {
+          let chatElement = document.createElement("div");
+          chatElement.classList.add("chat");
+          if (messageData.sender === username) {
+            chatElement.classList.add("chat-go");
+            chatElement.innerHTML = `<div class="chat-header"><span id="user">${messageData.sender}</span></div>`;
+            chatElement.innerHTML += `<div class="chat-bubble">${messageData.content}</div>`;
+          } else {
+            chatElement.classList.add("chat-come");
+            chatElement.innerHTML = `<div class="chat-header"><span id="user">${messageData.sender}</span></div>`;
+            chatElement.innerHTML += `<div class="chat-bubble">${messageData.content}</div>`;
+          }
+          chatArea.appendChild(chatElement);
+          chatArea.scrollTop = chatArea.scrollHeight;
+        }
+      }
+
+      function goback() {
+        setTimeout(function () {
+          toggleTransition();
+          chooseContainer.classList.remove("hidden");
+          messageContainer.classList.add("hidden");
+          createContainer.classList.add("hidden");
+          joinContainer.classList.add("hidden");
+        }, 1000);
+        toggleTransition();
+      }
+
+      function createChatroomContainer() {
+        setTimeout(function () {
+          toggleTransition();
+          createContainer.classList.remove("hidden");
+          chooseContainer.classList.add("hidden");
+          joinContainer.classList.add("hidden");
+        }, 1000);
+        toggleTransition();
+      }
+
+      function joinChatroomContainer() {
+        setTimeout(function () {
+          toggleTransition();
+          joinContainer.classList.remove("hidden");
+          chooseContainer.classList.add("hidden");
+          createContainer.classList.add("hidden");
+        }, 1000);
+        toggleTransition();
+      }
+
+      function toaster(type, message) {
+        const toasterDiv = document.getElementById("toaster");
+        const messageSpan = toasterDiv.querySelector(".message");
+
+        toasterDiv.classList.remove("success", "error");
+
+        switch (type) {
+          case "success":
+            toasterDiv.classList.add("success");
+            break;
+          case "error":
+            toasterDiv.classList.add("error");
+            break;
+          default:
+            toasterDiv.classList.add("success");
+        }
+
+        messageSpan.textContent = message;
+
+        toasterDiv.style.top = "4%";
+        setTimeout(function () {
+          toasterDiv.style.top = "-100px";
+        }, 3000);
+      }
+
+      function initialTransition() {
+        setTimeout(function () {
+          card.classList.add("active");
+        }, 100);
+      }
+
+      function toggleTransition() {
+        card.classList.toggle("active");
+      }
+
+      window.onbeforeunload = function () {
+        if (socket) {
+          socket.close();
+        }
+      };
+    </script>
+  </body>
+</html>
