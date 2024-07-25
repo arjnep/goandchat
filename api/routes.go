@@ -7,7 +7,7 @@ import (
 	"github.com/arjnep/goandchat/internal/handlers"
 )
 
-func SetupRoutes(manager *chat.ChatroomManager) {
+func SetupRoutes(manager *chat.ChatroomManager, fs http.Handler) {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		handlers.ServeWs(manager, w, r)
 	})
@@ -16,6 +16,5 @@ func SetupRoutes(manager *chat.ChatroomManager) {
 		handlers.CreateChatroom(manager, w, r)
 	})
 
-	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 }
